@@ -1,0 +1,262 @@
+<html>
+<head>
+<link type="text/css" href="redmond/jquery-ui-1.7.2.custom.css" rel="stylesheet" />	
+<link rel="stylesheet" type="text/css" href="jquery.autocomplete.css" /> 
+<script src="jquery-1.4a2.min.js" type="text/javascript"></script> 
+<script type="text/javascript" src="jquery-ui-1.7.2.custom.min.js"></script> 
+<script type='text/javascript' src="localdata.js"></script> 
+<script type='text/javascript' src='jquery.autocomplete.js'></script> 
+<script type="text/javascript">
+  var count = 0;
+  var advmode = false;
+
+  function saveState() {
+	window.localStorage.selector = $("#txtQuery").val();
+	window.localStorage.expr = $("#txtExpression").val();
+	window.localStorage.expr2 = $("#txtQueryAdv").val();
+	window.localStorage.hideSelection = !($("#ckSelection").is(':checked'));
+	window.localStorage.enableCompletion = $("#ckCompletion").is(':checked');
+  }
+
+  function loadState() {
+	$("#txtQuery").val(window.localStorage.selector);
+	$("#txtExpression").val(window.localStorage.expr);
+	$("#txtQueryAdv").val(window.localStorage.expr2);
+	if (window.localStorage.hideSelection == "true") {
+		$("#ckSelection").removeAttr("checked");
+	} else {
+		$("#ckSelection").attr("checked","checked");
+	}
+	if (window.localStorage.enableCompletion  == "true") {
+		$("#ckCompletion").attr("checked","checked");
+	} else {
+		$("#ckCompletion").removeAttr("checked");
+	}
+  }
+
+  function sendMessage() {  
+      saveState();
+      count = 0;
+      if (!advmode && $("#txtQuery").val() == "") {
+        $("#message").text("Selector must be specified").css({"color":"red"});
+        return;
+      }
+
+      chrome.tabs.getSelected(null, function(tab) {
+        var str_selector,expr;
+        
+        if (!advmode) {
+          str_selector = $("#txtQuery").val();
+          if ($("#txtExpression").val() != "") {
+            expr = "$('" + str_selector + "')." + $("#txtExpression").val();
+          }
+        } else {
+          var re = new RegExp("\\s*(jQuery|\\$)\\(['\"]([^'\"]+)['\"]\\).*$", 'gm');
+          expr =  $("#txtQueryAdv").val().trim();
+	  
+	  var groups = re.exec(expr);
+          if (groups && groups.length == 3) {
+            str_selector = groups[2];
+          } else {
+            $("#message").text("Invalid jQuery expresssion, must start with $( or jQuery(").css({"color":"red"});
+            return;
+          }
+        }
+        
+        chrome.tabs.sendRequest(tab.id, 
+          { selector: str_selector, expression: expr, show_selection:$("#ckSelection").is(':checked')}, 
+        function(response) {
+          count += response.selected;
+          $("#message").text(count + " objects selected").css({"color":"black"});
+	  if (response.error) {
+             $("#error").text(response.error).css({"color":"red"});
+             $("#result").text("");
+          } else {
+            $("#error").text("");
+            if (response.result != "__NO_RESULT__") {
+               $("#result").text("Expression result: " + response.result);
+            } else {
+               $("#result").text("");
+            }
+          }
+        });
+      });
+
+  };
+
+  function setAutoComplete() {
+	$("#txtQuery").autocomplete(selectorData, {
+		width: 100,
+		max: 20,
+		scrollHeight: 100,
+		multiple: true,
+		multipleSeparatorRegex: "[ ,]",
+		scroll: true,
+		matchContains: false,
+		formatItem: function(row, i, max) {
+			return row.name;
+		},
+		formatMatch: function(row, i, max) {
+			return row.name;
+		},
+		formatResult: function(row) {
+			return row.name;
+		}
+	});
+	$("#txtQueryAdv").autocomplete(selectorDataAdv, {
+		width: 100,
+		max: 20,
+		scrollHeight: 100,
+		multiple: true,
+		multipleSeparatorRegex: "(\\$\\([\"']|[\\w\\)]\\.|\\s|[ ,])",
+		scroll: true,
+		matchContains: false,
+		formatItem: function(row, i, max) {
+			return row.name;
+		},
+		formatMatch: function(row, i, max) {
+			return row.name;
+		},
+		formatResult: function(row) {
+			return row.name;
+		}
+	});
+	$("#txtExpression").autocomplete(functions, {
+		width: 100,
+		max: 20,
+		scrollHeight: 100,
+		multiple: true,
+		multipleSeparatorRegex: "[\\w\\)]\\.",
+		scroll: true,
+		matchContains: false,
+		formatItem: function(row, i, max) {
+			return row.name;
+		},
+		formatMatch: function(row, i, max) {
+			return row.name;
+		},
+		formatResult: function(row) {
+			return row.name;
+		}
+	});
+  }
+  
+  $(function(){
+
+    loadState();
+
+    $("input:checkbox").change( function(event) {
+	saveState();
+    });
+
+    $("#btnToggle").toggle(
+      function(event) {
+        $(event.target).val("<< Simple");
+        $(".rowSimple").hide();
+        $(".rowAdv").show();
+        advmode = true;
+        $("#txtQueryAdv").focus();
+        if ($("#txtQueryAdv").val() == "" && $("#txtQuery").val() != "") { 
+           $("#txtQueryAdv").val("$('" + $("#txtQuery").val() + "')." + $("#txtExpression").val());
+	}
+        $("#error,#result").text("");
+      },      
+      function(event) {
+        $(event.target).val("Advanced >>");
+        $(".rowSimple").show();
+        $(".rowAdv").hide();
+        $("#txtQuery").focus();
+        $("#error,#result").text("");
+        advmode = false;
+      }      
+    );  
+
+    $("#ckCompletion").click(
+      function(event) {
+	if ($("#ckCompletion").is(':checked')) {
+		setAutoComplete();
+	} else {
+		$(".autocomplete").unautocomplete();
+	}
+      }
+    );  
+
+    if ($("#ckCompletion").is(':checked')) {
+	setAutoComplete();
+    }
+
+    $("#btnCheck").click(sendMessage);  
+
+    $("input:text").keypress(function(event) {
+      if (event.which == 13) {
+        sendMessage();
+      }
+      return true;
+    });
+    $("#txtQuery").focus();  
+  });
+</script> 
+
+<style>
+body{
+  font-family: Arial, Verdana;
+  font-size: small;
+  width:300px;
+  height:100px;
+}
+td {
+  font-family: Arial, Verdana;
+  font-size: small;
+}
+.small {
+  font-size: x-small;
+}
+
+.flat  {
+  border: black 1px solid;
+  margin:0;
+  padding:2px;
+  }
+.flat2 {
+  border:1px solid #b2b2b2;
+  padding:3px 2px;
+  font-family: Courier;  
+}
+</style>
+</head>
+<body>
+  <div class="rowSimple">
+    Enter a jQuery selector and function (optional) to evaluate:
+    <br>
+    $("<input type="text" class="flat2  autocomplete" id="txtQuery" size="15"/>").<input type="text" class="flat2  autocomplete" id="txtExpression"  size="15"/> 
+    <br>
+    <div class ="small">
+     Example <br>
+           selectors: body, #myId, .myClass, etc.<br>
+           function: fadeOut(), hide(), show(), etc.<br>
+
+     </div>
+  </div>
+  <div class="rowAdv" style="display:none">
+    Enter a jQuery expression to evaluate:<br>
+    <textarea class="flat2 autocomplete" id="txtQueryAdv" cols="30" rows="4" ></textarea>
+    <br>
+    <div class ="small">
+     Example <br>
+         <pre>$("a").add("div").hide("slow")</pre>
+    </div>
+  </div>
+  
+   <br>
+    <input type="checkbox" class="flat2" id="ckSelection" checked="checked" value="show"/> Show selection <br>
+    <input type="checkbox" class="flat2" id="ckCompletion" value="enable"/> Code completion (experimental)
+   <br>
+    <div id="message"></div>
+   <div id="result"></div>
+   <div id="error"></div>
+    <br>
+    <input type="button" id="btnCheck" value="Check"/> &nbsp; <input type="button" id="btnToggle" value="Advanced >>"/>
+    <br>
+     <span class="small">This extension uses <a href="http://www.jquery.com" onclick="chrome.tabs.create({url:'http://www.jquery.com'})">jQuery</a> 1.4a2</span>
+</body>
+</html>
